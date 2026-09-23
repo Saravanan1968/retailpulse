@@ -1,0 +1,10 @@
+*.csv
+*.json
+!configs/*.json
+*.pkl
+*.env
+.venv/
+__pycache__/
+*.pyc
+data/raw/
+credentials/
