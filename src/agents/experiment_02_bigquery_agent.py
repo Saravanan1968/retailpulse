@@ -1,17 +1,13 @@
-# src/agents/experiment_02_bigquery_agent.py
-"""
-Experiment 2: Agent executes a parameterized BigQuery query.
-Key safety rule: agents use TEMPLATES only, never freeform SQL.
-"""
 import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+
 from google.cloud import bigquery
 from loguru import logger
 
 PROJECT_ID = "retailpulse-509504"
 client     = bigquery.Client(project=PROJECT_ID)
 
-# ── SQL Templates (vetted, read-only, parameterized) ──────────────────────
+# Only these templates are allowed - agents never run freeform SQL
 QUERY_TEMPLATES = {
     "customer_order_history": """
         SELECT
@@ -34,17 +30,6 @@ QUERY_TEMPLATES = {
         ORDER BY o.order_purchase_timestamp DESC
         LIMIT 20
     """,
-    "seller_performance": """
-        SELECT
-          seller_id,
-          city,
-          state,
-          ROUND(seller_rating_avg, 2)    AS avg_rating,
-          total_orders_fulfilled,
-          ROUND(late_delivery_pct, 1)    AS late_pct
-        FROM `retailpulse-509504.retailpulse_mart.dim_sellers`
-        WHERE seller_id = @seller_id
-    """,
     "cohort_avg_delivery": """
         SELECT
           c.state,
@@ -62,17 +47,13 @@ QUERY_TEMPLATES = {
 
 
 def run_query(template_name: str, params: dict) -> list[dict]:
-    """
-    Tool: Execute a vetted SQL template with parameters.
-    Returns list of row dicts.
-    """
+    """Run a pre-approved SQL template with the given parameters."""
     if template_name not in QUERY_TEMPLATES:
         raise ValueError(f"Unknown template: {template_name}. "
                          f"Allowed: {list(QUERY_TEMPLATES.keys())}")
 
     query = QUERY_TEMPLATES[template_name]
 
-    # Build BigQuery parameters
     bq_params = [
         bigquery.ScalarQueryParameter(k, "STRING", v)
         for k, v in params.items()
@@ -87,23 +68,18 @@ def run_query(template_name: str, params: dict) -> list[dict]:
 
 
 if __name__ == "__main__":
-    import json
-
-    # Fetch order history for a sample customer
-    # Get a real customer_unique_id from BigQuery first
-    sample_query = """
+    sample = list(client.query("""
         SELECT customer_unique_id
         FROM `retailpulse-509504.retailpulse_mart.dim_customers`
         WHERE total_orders >= 1
         LIMIT 1
-    """
-    sample_customer = [dict(r) for r in client.query(sample_query).result()][0]
-    cuid = sample_customer['customer_unique_id']
+    """).result())[0]
+    cuid = sample['customer_unique_id']
 
     print(f"Fetching order history for customer: {cuid[:8]}...")
     history = run_query("customer_order_history", {"customer_unique_id": cuid})
 
-    print(f"\n── Experiment 2 Result: {len(history)} orders found ──")
+    print(f"\nExperiment 2 Result: {len(history)} orders found")
     for order in history:
         print(f"  {order['order_date']} | {order['order_status']:12s} | "
               f"R${order['payment_value']} | "

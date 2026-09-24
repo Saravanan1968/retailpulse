@@ -1,26 +1,19 @@
-# src/api/main.py
-"""
-RetailPulse Prediction API
-Serves churn predictions + SHAP explanations for the agent layer.
-"""
-
 import pickle
 import json
 import numpy as np
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from pydantic import BaseModel, Field
 import shap
 
-# ── App setup ──────────────────────────────────────────────────────────────
 app = FastAPI(
     title="RetailPulse Prediction API",
     description="Churn risk scoring with SHAP explanations",
     version="1.0.0"
 )
 
-# ── Model loading (at startup) ─────────────────────────────────────────────
-MODEL_PATH   = Path("models/artifacts/churn_model_xgb.pkl")
+# Load model and features once when the server starts
+MODEL_PATH    = Path("models/artifacts/churn_model_xgb.pkl")
 FEATURES_PATH = Path("models/artifacts/feature_cols.json")
 
 with open(MODEL_PATH, "rb") as f:
@@ -29,14 +22,13 @@ with open(MODEL_PATH, "rb") as f:
 with open(FEATURES_PATH) as f:
     FEATURE_COLS = json.load(f)
 
-# Pre-build SHAP explainer (expensive, do once at startup)
+# Building the SHAP explainer here avoids rebuilding it on every request
 explainer = shap.TreeExplainer(model)
 
-print(f"✓ Model loaded: {MODEL_PATH}")
-print(f"✓ Features: {FEATURE_COLS}")
+print(f"Model loaded: {MODEL_PATH}")
+print(f"Features: {FEATURE_COLS}")
 
 
-# ── Request / Response Schemas ─────────────────────────────────────────────
 class CustomerFeatures(BaseModel):
     monetary:               float = Field(..., gt=0, description="Total spend in BRL")
     avg_review_score:       float = Field(..., ge=1, le=5, description="Avg review score 1-5")
@@ -76,7 +68,6 @@ class PredictionResponse(BaseModel):
     top_risk_factors:   list
 
 
-# ── Endpoints ──────────────────────────────────────────────────────────────
 @app.get("/health")
 def health_check():
     return {"status": "ok", "model": "XGBoost_behavioral", "features": len(FEATURE_COLS)}
@@ -84,11 +75,7 @@ def health_check():
 
 @app.post("/predict", response_model=PredictionResponse)
 def predict_churn(features: CustomerFeatures):
-    """
-    Predict churn probability for a customer + return SHAP explanations.
-    Used by the Prediction Agent and Root-Cause Agent.
-    """
-    # Build feature vector in correct order
+    # Build the feature array in the same order the model was trained on
     X = np.array([[
         features.monetary,
         features.avg_review_score,
@@ -103,11 +90,9 @@ def predict_churn(features: CustomerFeatures):
         features.distinct_payment_types
     ]])
 
-    # Predict
-    churn_prob  = float(model.predict_proba(X)[0][1])
-    churn_pred  = churn_prob >= 0.5
+    churn_prob = float(model.predict_proba(X)[0][1])
+    churn_pred = churn_prob >= 0.5
 
-    # Risk level
     if churn_prob >= 0.80:
         risk_level = "HIGH"
     elif churn_prob >= 0.50:
@@ -115,12 +100,10 @@ def predict_churn(features: CustomerFeatures):
     else:
         risk_level = "LOW"
 
-    # SHAP values
     sv = explainer.shap_values(X)[0]
-    shap_dict = {feat: round(float(val), 4)
-                 for feat, val in zip(FEATURE_COLS, sv)}
+    shap_dict = {feat: round(float(val), 4) for feat, val in zip(FEATURE_COLS, sv)}
 
-    # Top 3 risk factors (highest positive SHAP = most contributing to churn)
+    # Sort by absolute contribution, positive SHAP means it pushes toward churn
     sorted_shap = sorted(shap_dict.items(), key=lambda x: x[1], reverse=True)
     top_factors = [
         {"feature": k, "shap_value": v, "impact": "increases churn risk" if v > 0 else "decreases churn risk"}
@@ -138,5 +121,4 @@ def predict_churn(features: CustomerFeatures):
 
 @app.get("/features")
 def get_features():
-    """Returns the list of features the model expects."""
     return {"features": FEATURE_COLS, "count": len(FEATURE_COLS)}

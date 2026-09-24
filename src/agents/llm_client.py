@@ -1,4 +1,3 @@
-# src/agents/llm_client.py
 import os
 from dotenv import load_dotenv
 from google import genai
@@ -8,7 +7,7 @@ load_dotenv()
 client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
 def call_llm(prompt: str, model: str = "gemini-3.6-flash") -> str:
-    """Call Gemini and return text response."""
+    """Send a prompt to Gemini and return the text response."""
     response = client.models.generate_content(
         model=model,
         contents=prompt

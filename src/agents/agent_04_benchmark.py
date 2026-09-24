@@ -1,9 +1,3 @@
-# src/agents/agent_04_benchmark.py
-"""
-Benchmark Agent: Compares a customer's delivery/review metrics
-against their state cohort average from BigQuery.
-"""
-
 import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
@@ -16,8 +10,8 @@ client     = bigquery.Client(project=PROJECT_ID)
 
 def get_cohort_benchmark(customer_unique_id: str) -> dict:
     """
-    Fetch customer's state and compare their delivery/review metrics
-    against the state cohort average.
+    Compare a customer's delivery and review metrics against
+    the average for all customers in the same Brazilian state.
     """
     query = """
     WITH customer_state AS (
@@ -72,7 +66,7 @@ def get_cohort_benchmark(customer_unique_id: str) -> dict:
     rows = list(client.query(query, job_config=job_config).result())
 
     if not rows:
-        logger.warning("No benchmark data found — customer may not be in dim_customers")
+        logger.warning("No benchmark data found for this customer")
         return {}
 
     row = dict(rows[0])
@@ -84,22 +78,20 @@ def get_cohort_benchmark(customer_unique_id: str) -> dict:
 
 
 if __name__ == "__main__":
-    from google.cloud import bigquery as bq
-
-    # Get a sample customer
-    sample = list(bq.Client(project=PROJECT_ID).query("""
-        SELECT customer_unique_id FROM `retailpulse-509504.retailpulse_mart.dim_customers`
+    sample = list(client.query("""
+        SELECT customer_unique_id
+        FROM `retailpulse-509504.retailpulse_mart.dim_customers`
         WHERE total_orders >= 1 LIMIT 1
     """).result())[0]
 
     result = get_cohort_benchmark(sample['customer_unique_id'])
 
-    print("\n── Benchmark Agent Result ──")
-    print(f"Customer state      : {result.get('state')}")
-    print(f"Cohort size         : {result.get('cohort_size'):,}")
-    print(f"Cust delivery days  : {result.get('cust_avg_delivery')}")
-    print(f"Cohort delivery avg : {result.get('cohort_avg_delivery')}")
-    print(f"Delivery vs cohort  : {result.get('delivery_vs_cohort'):+.1f} days")
-    print(f"Cust review score   : {result.get('cust_avg_review')}")
-    print(f"Cohort review avg   : {result.get('cohort_avg_review')}")
-    print(f"Review vs cohort    : {result.get('review_vs_cohort'):+.2f}")
+    print("\nBenchmark Agent Result")
+    print(f"  Customer state      : {result.get('state')}")
+    print(f"  Cohort size         : {result.get('cohort_size'):,}")
+    print(f"  Cust delivery days  : {result.get('cust_avg_delivery')}")
+    print(f"  Cohort delivery avg : {result.get('cohort_avg_delivery')}")
+    print(f"  Delivery vs cohort  : {result.get('delivery_vs_cohort'):+.1f} days")
+    print(f"  Cust review score   : {result.get('cust_avg_review')}")
+    print(f"  Cohort review avg   : {result.get('cohort_avg_review')}")
+    print(f"  Review vs cohort    : {result.get('review_vs_cohort'):+.2f}")

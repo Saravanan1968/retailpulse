@@ -9,13 +9,17 @@ PREDICT_URL = "http://localhost:8000/predict"
 
 
 def explain_churn_score(customer_features: dict, customer_id: str = "unknown") -> str:
+    """
+    Call the prediction API to get the churn score and SHAP values,
+    then ask Gemini to explain the top drivers in plain English.
+    """
     logger.info(f"Getting prediction for customer {customer_id[:8]}...")
     response = requests.post(PREDICT_URL, json=customer_features)
     result   = response.json()
 
-    churn_prob  = result['churn_probability']
-    risk_level  = result['risk_level']
-    top_factors = result['top_risk_factors']
+    churn_prob   = result['churn_probability']
+    risk_level   = result['risk_level']
+    top_factors  = result['top_risk_factors']
 
     factors_text = "\n".join([
         f"- {f['feature']}: SHAP={f['shap_value']:+.3f} ({f['impact']})"
@@ -27,12 +31,10 @@ You are a customer retention analyst. The churn prediction model has scored a cu
 Explain in plain English WHY this customer is at risk, based ONLY on the SHAP values below.
 Do NOT add information not present in the data. Be specific and concise (2-3 sentences).
 
-[MODEL OUTPUT — USE ONLY THESE NUMBERS]
 Churn Probability: {churn_prob:.0%}
 Risk Level: {risk_level}
 Top Contributing Factors:
 {factors_text}
-[END MODEL OUTPUT]
 
 Plain English explanation:
 """
@@ -55,8 +57,6 @@ if __name__ == "__main__":
         "distinct_payment_types": 1
     }
 
-    print("Running Experiment 4 — SHAP Interpreter...\n")
+    print("Experiment 4 - SHAP Interpreter\n")
     explanation = explain_churn_score(high_risk_customer, customer_id="demo-customer")
-
-    print("── Experiment 4 Result ──")
     print(explanation)
